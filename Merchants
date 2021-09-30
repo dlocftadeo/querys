@@ -1,0 +1,49 @@
+drop table default.info_merchants_inicio;
+
+CREATE table default.info_merchants_inicio AS 
+    (SELECT R.merchant_reference,
+         mc.merchant_name,
+         info.industry,
+         min(cast(R.created_date AS date)) AS fecha_inicio , 
+     max(cast(R.created_date AS date)) AS fecha_fin
+    FROM risk.risk_risk_case R
+    LEFT JOIN default.merchant_data_pf info
+        ON R.merchant_reference = info.merchant_reference
+            AND R.country_code= info.country_code
+    LEFT JOIN dl_db_master.unipay_merchants AS mc
+        ON cast(R.merchant_reference AS varchar) = cast(mc.idmerchants AS varchar)
+    WHERE -- R.year='2021'
+     R.operation_type IN ('WITH_CVV', 'WITHOUT_CVV','TOKEN')
+            AND info.segmento!='Offline'
+    GROUP BY  1,2,3 ); 
+    
+    Select
+R.month as mes_pago,
+R.year,
+M.FECHA_INICIO,
+M.fecha_fin,
+date_diff('month',  m.FECHA_INICIO,m.fecha_fin) Antiguedad,
+m.merchant_reference,
+M.merchant_name,
+-- R.country_code,
+M.industry,
+count(*) incoming_qty,
+sum(usd_amount) as incoming_usd,
+sum(case when CO.result in ('ACCEPT') then 1 else 0 end) as final_accept_qty,
+sum(case when CO.result in ('ACCEPT') then usd_amount else 0 end) as final_accept_usd,
+sum(case when CO.result = 'ACCEPT' AND CBK.id_boleto is NOT null then 1 else 0 end) cbk_qty,
+sum(case when CO.result = 'ACCEPT' AND CBK.id_boleto is NOT null then usd_amount else 0 end) cbk_usd
+from risk.risk_risk_case R
+INNER JOIN default.info_merchants_inicio M
+       on R.merchant_reference=M.merchant_reference     
+       and (year(M.fecha_fin)= 2021 and (month(M.fecha_fin)= 9 or month(M.fecha_fin)=9))
+LEFT JOIN risk.risk_risk_case_collect AS CO
+        ON R.case_id = CO.case_id
+LEFT JOIN dl_db_master.unipay_chargebacks AS CBK
+         ON R.ticket_id = CBK.id_boleto        
+where
+
+ R.operation_type IN ('WITH_CVV', 'WITHOUT_CVV','TOKEN')
+
+
+group by 1,2,3,4,5,6,7,8
